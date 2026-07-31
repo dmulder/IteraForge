@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=IteraForge
+Comment=Open IteraForge local activity portal
+Exec=@BROWSER@ --ozone-platform=x11 --app=http://127.0.0.1:@PORT@ --class=iteraforge --name=IteraForge --user-data-dir=@HOME@/.local/share/iteraforge/chrome-profile --no-first-run --no-default-browser-check
+Icon=iteraforge
+Terminal=false
+Categories=Development;Office;
+StartupNotify=true
+StartupWMClass=iteraforge

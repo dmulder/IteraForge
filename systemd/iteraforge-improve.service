@@ -1,0 +1,11 @@
+[Unit]
+Description=Run one IteraForge automatic improvement
+After=iteraforge.service
+
+[Service]
+Type=oneshot
+Environment=ITERAFORGE_CONFIG_HOME=%h/.config/iteraforge
+Environment=ITERAFORGE_DATA_HOME=%h/.local/share/iteraforge
+ExecStart=%h/.local/bin/iteraforge-improve
+NoNewPrivileges=true
+PrivateTmp=true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic IteraForge automatic improvement
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=4h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

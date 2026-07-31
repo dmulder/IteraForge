@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IteraForge</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <meta name="iteraforge-token" content="__TOKEN__">
+  <aside class="sidebar">
+    <div class="brand">IteraForge</div>
+    <nav id="nav">
+      <button class="nav-item active" data-view="builder">Task Builder</button>
+      <button class="nav-item" data-view="activity">Activity</button>
+      <button class="nav-item" data-view="settings">Settings</button>
+      <div class="nav-label">Tabs</div>
+      <div id="tab-nav"></div>
+    </nav>
+  </aside>
+  <main class="workspace">
+    <section id="builder" class="view active">
+      <div class="toolbar">
+        <h1>Task Builder</h1>
+        <button id="refresh-jobs">Refresh</button>
+      </div>
+      <form id="task-form" class="panel">
+        <label>
+          Mode
+          <select name="mode" id="task-mode">
+            <option value="create">Create new tab</option>
+            <option value="modify">Modify existing tab</option>
+          </select>
+        </label>
+        <label id="existing-tab-label" hidden>
+          Existing tab
+          <select name="tab_id" id="existing-tab"></select>
+        </label>
+        <label>
+          Request
+          <textarea name="prompt" rows="7" placeholder="Create a tab named Project Risks where I can record a risk, severity, owner, mitigation, status, and review date."></textarea>
+        </label>
+        <button type="submit">Run OpenCode</button>
+      </form>
+      <section class="panel">
+        <h2>Jobs</h2>
+        <div id="jobs"></div>
+      </section>
+    </section>
+
+    <section id="activity" class="view">
+      <div class="toolbar">
+        <h1>Activity</h1>
+        <button id="refresh-activity">Refresh</button>
+      </div>
+      <div id="activity-list" class="panel"></div>
+    </section>
+
+    <section id="settings" class="view">
+      <h1>Settings</h1>
+      <form id="settings-form" class="panel settings-grid">
+        <label>Provider <input name="provider"></label>
+        <label>API base URL <input name="api_base_url"></label>
+        <label>Model <input name="model"></label>
+        <label>Replace API credential <input name="api_key" type="password" autocomplete="new-password"></label>
+        <label>OpenCode command <input name="opencode_command"></label>
+        <label>Safe OpenCode args <input name="safe_args" placeholder="run --format json"></label>
+        <label>Agent timeout seconds <input name="timeout_seconds" type="number" min="10"></label>
+        <label>Repair attempts <input name="repair_attempts" type="number" min="0"></label>
+        <label>Application port <input name="app_port" type="number" min="1024"></label>
+        <label>Improvement interval minutes <input name="improvement_interval_minutes" type="number" min="15"></label>
+        <label>Browser command <input name="browser_command"></label>
+        <label class="checkbox"><input name="automatic_improvement_enabled" type="checkbox"> Automatic improvement enabled</label>
+        <button type="submit">Save Settings</button>
+      </form>
+      <div class="panel">
+        <button id="import-opencode">Import Existing OpenCode Config</button>
+      </div>
+      <div id="settings-status" class="panel"></div>
+    </section>
+
+    <section id="tab-view" class="view tab-shell">
+      <div class="toolbar">
+        <h1 id="tab-title">Tab</h1>
+        <button id="reload-tab">Reload</button>
+      </div>
+      <div id="tab-mount" class="direct-tab-mount"></div>
+    </section>
+  </main>
+  <div id="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

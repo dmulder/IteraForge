@@ -1,0 +1,30 @@
+[Unit]
+Description=IteraForge local activity portal
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Restart=always
+RestartSec=10
+Environment=ITERAFORGE_PORT=8765
+
+ExecStartPre=-/usr/bin/podman rm -f iteraforge
+ExecStart=/usr/bin/podman run \
+    --name iteraforge \
+    --replace \
+    --userns=keep-id:uid=10001,gid=10001 \
+    --cap-drop=ALL \
+    --security-opt=no-new-privileges \
+    -p 127.0.0.1:8765:8765 \
+    -v %h/.config/iteraforge:/config:Z \
+    -v %h/.local/share/iteraforge:/data:Z \
+    -e ITERAFORGE_CONFIG_HOME=/config \
+    -e ITERAFORGE_DATA_HOME=/data \
+    -e ITERAFORGE_PORT=8765 \
+    localhost/iteraforge:latest
+ExecStop=/usr/bin/podman stop -t 30 iteraforge
+
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
