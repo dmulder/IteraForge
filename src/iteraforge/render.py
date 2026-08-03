@@ -5,7 +5,7 @@ from html.parser import HTMLParser
 from typing import Any
 
 from .models import TabManifest
-from .tabs import load_manifest, source_dir
+from .tabs import git_head, load_manifest, source_dir
 
 BLOCKED_TAGS = {"script", "iframe", "object", "embed", "base", "link", "meta"}
 VOID_TAGS = {"area", "br", "col", "hr", "img", "input", "source", "track", "wbr"}
@@ -131,6 +131,7 @@ def render_payload(tab_id: str, runtime_token: str) -> dict[str, Any]:
         "js": js,
         "runtime_token": runtime_token,
         "schema_version": manifest.schema_version,
+        "asset_version": git_head(tab_id) or str(manifest.version),
     }
 
 

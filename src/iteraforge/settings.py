@@ -8,8 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from .paths import config_home, opencode_root, secrets_root
+from .providers import choose_default_provider, effective_provider_secrets, provider_config_root
 
 DEFAULTS: dict[str, Any] = {
+    "agent_provider": "opencode",
     "provider": "",
     "api_base_url": "",
     "model": "",
@@ -24,6 +26,7 @@ DEFAULTS: dict[str, Any] = {
     "snapshot_retention": 20,
     "activity_retention": 1000,
     "ui_managed_keys": [
+        "agent_provider",
         "provider",
         "api_base_url",
         "model",
@@ -91,6 +94,7 @@ def load_settings() -> dict[str, Any]:
     path = settings_file()
     if path.exists():
         data.update(json.loads(path.read_text(encoding="utf-8")))
+    data["agent_provider"] = choose_default_provider(data.get("agent_provider"))
     data["opencode_config_path"] = str(opencode_root())
     data["api_key_configured"] = secret_file().exists() and secret_file().stat().st_size > 0
     data["opencode_auth_configured"] = (
@@ -118,6 +122,7 @@ def save_settings(updates: dict[str, Any]) -> dict[str, Any]:
     current.pop("api_key_configured", None)
     current.pop("opencode_auth_configured", None)
     current.update(updates)
+    current["agent_provider"] = choose_default_provider(current.get("agent_provider"))
     _atomic_json(settings_file(), current)
     merge_opencode_config(current)
     return public_settings()
@@ -153,7 +158,15 @@ def import_existing_opencode_config(source: Path | None = None, overwrite: bool 
         else:
             shutil.copy2(child, target)
         copied.append(child.name)
-    return {"imported": bool(copied), "source": str(selected), "copied": copied, "skipped": skipped}
+    provider_destination = provider_config_root("opencode")
+    if copied and not provider_destination.exists():
+        shutil.copytree(destination, provider_destination, ignore=shutil.ignore_patterns("node_modules", ".cache"))
+    return {
+        "imported": bool(copied),
+        "source": str(selected),
+        "copied": copied,
+        "skipped": skipped,
+    }
 
 
 def merge_opencode_config(settings: dict[str, Any]) -> None:
@@ -181,6 +194,12 @@ def credential_environment() -> dict[str, str]:
         auth = json.loads(auth_path.read_text(encoding="utf-8"))
         if not isinstance(auth, dict):
             raise ValueError("OpenCode auth file must contain a JSON object")
+        environment["OPENCODE_AUTH_CONTENT"] = json.dumps(auth, separators=(",", ":"))
+    provider_auth = next((path for path in effective_provider_secrets("opencode") if path.name == "auth.json"), None)
+    if provider_auth and provider_auth.exists() and provider_auth.stat().st_size > 0:
+        auth = json.loads(provider_auth.read_text(encoding="utf-8"))
+        if not isinstance(auth, dict):
+            raise ValueError("OpenCode provider auth file must contain a JSON object")
         environment["OPENCODE_AUTH_CONTENT"] = json.dumps(auth, separators=(",", ":"))
     path = secret_file()
     if not path.exists():

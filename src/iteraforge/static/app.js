@@ -150,8 +150,12 @@ function tabAssetUrl(src, payload) {
   if (!src) return "";
   const trimmed = src.trim();
   if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|\/)/i.test(trimmed)) return trimmed;
-  const normalized = new URL(trimmed, "http://iteraforge.local/").pathname.replace(/^\/+/, "");
-  return `/tabs/${encodeURIComponent(payload.manifest.id)}/${normalized}`;
+  const asset = new URL(trimmed, "http://iteraforge.local/");
+  const normalized = asset.pathname.replace(/^\/+/, "");
+  const params = new URLSearchParams(asset.search);
+  if (payload.asset_version) params.set("v", payload.asset_version);
+  const query = params.toString();
+  return `/tabs/${encodeURIComponent(payload.manifest.id)}/${normalized}${query ? `?${query}` : ""}`;
 }
 
 function entrypointLoadsAppJs(container) {
@@ -174,12 +178,31 @@ function createTabRuntime(runtimeToken) {
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   }
+  const postJson = (path, payload) => runtimeRequest(path, {method: "POST", body: JSON.stringify(payload || {})});
   return {
     listRecords: collection => runtimeRequest(`/api/runtime/records/${encodeURIComponent(collection)}`).then(data => data.records),
     createRecord: (collection, data) => runtimeRequest(`/api/runtime/records/${encodeURIComponent(collection)}`, {method: "POST", body: JSON.stringify({data})}),
     updateRecord: (collection, id, data) => runtimeRequest(`/api/runtime/records/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {method: "PUT", body: JSON.stringify({data})}),
     deleteRecord: (collection, id) => runtimeRequest(`/api/runtime/records/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`, {method: "DELETE"}),
     query: query => runtimeRequest("/api/runtime/query", {method: "POST", body: JSON.stringify(query)}),
+    connectors: {
+      capabilities: () => runtimeRequest("/api/runtime/connectors/capabilities"),
+      web: {
+        request: payload => postJson("/api/runtime/connectors/web", payload),
+      },
+      shell: {
+        run: payload => postJson("/api/runtime/connectors/shell", payload),
+      },
+      ai: {
+        prompt: payload => postJson("/api/runtime/connectors/ai", payload),
+      },
+      cache: {
+        get: payload => postJson("/api/runtime/connectors/cache/get", payload),
+        set: payload => postJson("/api/runtime/connectors/cache/set", payload),
+        delete: payload => postJson("/api/runtime/connectors/cache/delete", payload),
+        clear: payload => postJson("/api/runtime/connectors/cache/clear", payload),
+      },
+    },
   };
 }
 
@@ -329,6 +352,36 @@ async function loadSettings() {
     <div>OpenCode config path: <code>${escapeHtml(data.opencode_config_path || "")}</code></div>
     <div>API credential configured: <strong>${data.api_key_configured ? "yes" : "no"}</strong></div>
     <div>Imported OpenCode authentication: <strong>${data.opencode_auth_configured ? "yes" : "no"}</strong></div>`;
+  await loadProviders(data.agent_provider);
+}
+
+async function loadProviders(activeProvider) {
+  const data = await api("/api/settings/providers");
+  const select = document.getElementById("agent-provider");
+  select.innerHTML = "";
+  for (const provider of data.providers) {
+    const option = document.createElement("option");
+    option.value = provider.id;
+    option.textContent = provider.title;
+    option.selected = provider.id === activeProvider;
+    select.append(option);
+  }
+  document.getElementById("provider-status").innerHTML = data.providers.map(provider => `
+    <article class="event">
+      <strong>${escapeHtml(provider.title)}</strong>
+      <div>CLI: ${provider.available ? "available" : "missing"} | Config: ${provider.configured ? provider.config_source : "not found"}</div>
+      <code>${escapeHtml(provider.config_path)}</code>
+    </article>`).join("") || "No providers registered.";
+}
+
+async function loadTabStore() {
+  const data = await api("/api/tab-store");
+  document.getElementById("tab-store-list").innerHTML = data.tabs.map(tab => `
+    <article class="event">
+      <strong>${escapeHtml(tab.title || tab.template_id)}</strong>
+      <div>${escapeHtml(tab.description || "")}</div>
+      ${tab.invalid ? `<pre class="errors">${escapeHtml(tab.error || "Invalid template")}</pre>` : `<button class="install-template" data-template-id="${escapeHtml(tab.template_id)}" type="button">Install</button>`}
+    </article>`).join("") || "No community tabs are bundled yet.";
 }
 
 document.getElementById("nav").addEventListener("click", event => {
@@ -389,6 +442,28 @@ document.getElementById("import-opencode").addEventListener("click", async () =>
   toast(result.imported ? "OpenCode config imported" : "No new OpenCode config imported");
   await loadSettings();
 });
+document.getElementById("import-providers").addEventListener("click", async () => {
+  await api("/api/settings/providers/import", {method: "POST", body: JSON.stringify({overwrite: false})});
+  toast("Provider configs imported");
+  await loadSettings();
+});
+document.getElementById("refresh-tab-store").addEventListener("click", loadTabStore);
+document.getElementById("tab-store-list").addEventListener("click", async event => {
+  const button = event.target.closest(".install-template");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const result = await api(`/api/tab-store/${encodeURIComponent(button.dataset.templateId)}/install`, {method: "POST", body: JSON.stringify({})});
+    toast("Tab installed");
+    await loadTabs();
+    await openTab(result.tab_id);
+  } catch (error) {
+    toast("Install failed");
+    console.error(error);
+  } finally {
+    button.disabled = false;
+  }
+});
 document.getElementById("refresh-jobs").addEventListener("click", loadJobs);
 document.getElementById("refresh-activity").addEventListener("click", loadActivity);
 document.getElementById("reload-tab").addEventListener("click", () => activeTab && openTab(activeTab.id));
@@ -436,4 +511,5 @@ loadTabs();
 loadJobs();
 loadActivity();
 loadSettings();
+loadTabStore();
 listenEvents();

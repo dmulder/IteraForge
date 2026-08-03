@@ -12,8 +12,11 @@ from fastapi import HTTPException
 from starlette.datastructures import Headers
 
 from iteraforge.app import create_app
+from iteraforge.catalog import list_catalog_tabs
+from iteraforge.connectors import cache_get, cache_set, shell_run
 from iteraforge.events import EventBus
-from iteraforge.models import JobRequest
+from iteraforge.models import ConnectorShellRequest, JobRequest
+from iteraforge.providers import choose_default_provider, import_provider_configs, list_providers, provider_config_root, run_prompt
 from iteraforge.render import render_payload, sanitize_html
 from iteraforge.runner import FakeAgentRunner, OpenCodeRunner, RunnerResult
 from iteraforge.security import new_token, require_base_auth, resolve_inside, validate_tab_id
@@ -37,6 +40,7 @@ from iteraforge.tabs import (
 )
 from iteraforge.validation import validate_tab
 from iteraforge.workflow import JobManager
+from iteraforge.workflow import build_prompt
 
 
 @pytest.fixture(autouse=True)
@@ -114,6 +118,42 @@ def test_validation_ignores_tool_artifacts_and_warns_without_errors():
     assert not any(".npm/_cacache/blob" in warning for warning in report.warnings)
 
 
+def test_validation_allows_trusted_tab_runtime_capabilities():
+    scaffold_tab("trusted", "Trusted", "", "")
+    (source_dir("trusted") / "app.js").write_text(
+        """
+localStorage.setItem("x", "y");
+window.IteraForgeRuntime.connectors.web.request({url: "https://example.com"});
+window.IteraForgeRuntime.connectors.shell.run({script: "date"});
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_tab("trusted")
+
+    assert report.errors == []
+    assert not any("https?" in warning for warning in report.warnings)
+    assert not any("localStorage" in warning for warning in report.warnings)
+    assert not any("IteraForgeRuntime" in warning for warning in report.warnings)
+
+
+def test_validation_warns_for_reload_unsafe_tab_javascript():
+    scaffold_tab("reload-risk", "Reload Risk", "", "")
+    (source_dir("reload-risk") / "app.js").write_text(
+        """
+const state = new Map();
+document.addEventListener("click", () => state.clear());
+""",
+        encoding="utf-8",
+    )
+
+    report = validate_tab("reload-risk")
+
+    assert report.errors == []
+    assert any("same-page tab reloads" in warning for warning in report.warnings)
+    assert any("IteraForgeTabCleanup" in warning for warning in report.warnings)
+
+
 def test_commit_excludes_tool_artifacts():
     scaffold_tab("commit-artifacts", "Commit Artifacts", "", "")
     artifact = source_dir("commit-artifacts") / ".cache" / "tool"
@@ -169,6 +209,19 @@ def test_credential_environment_loads_opencode_auth_and_provider_identifier(tmp_
     assert environment["AZURE_RESOURCE_NAME"] == "example-resource"
 
 
+def test_provider_import_and_default_selection(tmp_path):
+    home = tmp_path / "home"
+    (home / ".codex").mkdir(parents=True)
+    (home / ".codex" / "config.toml").write_text("model = 'x'\n", encoding="utf-8")
+
+    result = import_provider_configs(home)
+
+    assert result["imported"]["codex"]["copied"]
+    assert choose_default_provider() == "codex"
+    providers = {provider["id"]: provider for provider in list_providers()}
+    assert providers["codex"]["configured"] is True
+
+
 def test_opencode_preflight_reports_missing_dependencies(monkeypatch):
     monkeypatch.setattr("iteraforge.runner.shutil.which", lambda _command: None)
     assert OpenCodeRunner().preflight() == "Missing task runtime dependencies: git, opencode"
@@ -203,6 +256,110 @@ def test_opencode_runner_uses_runtime_home_outside_tab_source(monkeypatch):
     assert captured["HOME"] != str(source_dir("runner-env"))
     assert str(source_dir("runner-env")) not in captured["npm_config_cache"]
     assert "/runtime/agent-home/runner-env" in captured["HOME"]
+
+
+def test_connector_cache_and_shell_run():
+    cache_set("connector-tab", "n", "k", {"value": 1}, ttl_seconds=60)
+    assert cache_get("connector-tab", "n", "k") == {"value": 1}
+
+    result = shell_run("connector-tab", ConnectorShellRequest(script="printf hello"))
+
+    assert result["ok"] is True
+    assert result["stdout"] == "hello"
+
+
+def test_generated_prompt_documents_connectors():
+    prompt = build_prompt({"prompt": "Build", "mode": "create", "tab_id": "x"})
+
+    assert "window.IteraForgeRuntime.connectors.web.request" in prompt
+    assert "window.IteraForgeRuntime.connectors.shell.run" in prompt
+    assert "window.IteraForgeRuntime.connectors.ai.prompt" in prompt
+    assert "window.IteraForgeRuntime.connectors.cache.get/set/delete/clear" in prompt
+    assert "Show immediate visible pending state" in prompt
+    assert "ok === false" in prompt
+    assert "Do not hard-code API keys" in prompt
+    assert "reload-safe" in prompt
+    assert "window.IteraForgeTabCleanup" in prompt
+
+
+def test_runtime_ai_prompt_uses_configured_opencode_home(monkeypatch):
+    config = provider_config_root("opencode")
+    config.mkdir(parents=True)
+    (config / "opencode.json").write_text('{"model":"azure/gpt-5.6-sol"}\n', encoding="utf-8")
+    captured: dict[str, Any] = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = args
+        captured["cwd"] = kwargs["cwd"]
+        captured["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(args, 0, stdout='{"ok":true}', stderr="")
+
+    monkeypatch.setattr("iteraforge.providers.shutil.which", lambda _command: "/usr/bin/opencode")
+    monkeypatch.setattr("iteraforge.providers.subprocess.run", fake_run)
+
+    result = run_prompt("hello")
+
+    assert result["ok"] is True
+    assert captured["args"][:3] == ["opencode", "run", "--format"]
+    assert captured["env"]["OPENCODE_CONFIG_DIR"] == str(config)
+    assert captured["env"]["XDG_CONFIG_HOME"] != str(Path.home() / ".config")
+    linked = Path(captured["env"]["XDG_CONFIG_HOME"]) / "opencode"
+    assert linked.is_symlink()
+    assert linked.resolve() == config.resolve()
+
+
+def test_runtime_ai_prompt_extracts_opencode_json_error(monkeypatch):
+    config = provider_config_root("opencode")
+    config.mkdir(parents=True)
+    error_payload = {
+        "type": "error",
+        "error": {
+            "name": "APIError",
+            "data": {
+                "message": "Not Found: DeploymentNotFound: claude-sonnet-4-6 does not exist"
+            },
+        },
+    }
+
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 1, stdout=json.dumps(error_payload), stderr="")
+
+    monkeypatch.setattr("iteraforge.providers.shutil.which", lambda _command: "/usr/bin/opencode")
+    monkeypatch.setattr("iteraforge.providers.subprocess.run", fake_run)
+
+    result = run_prompt("hello")
+
+    assert result["ok"] is False
+    assert "DeploymentNotFound" in result["error"]
+    assert result["exit_code"] == 1
+
+
+def test_runtime_ai_prompt_extracts_opencode_text_events(monkeypatch):
+    config = provider_config_root("opencode")
+    config.mkdir(parents=True)
+    stdout = "\n".join(
+        [
+            json.dumps({"type": "step_start", "part": {"type": "step-start"}}),
+            json.dumps({"type": "text", "part": {"type": "text", "text": '{"summary":"'}}),
+            json.dumps({"type": "text", "part": {"type": "text", "text": 'ok"}'}}),
+        ]
+    )
+
+    def fake_run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr("iteraforge.providers.shutil.which", lambda _command: "/usr/bin/opencode")
+    monkeypatch.setattr("iteraforge.providers.subprocess.run", fake_run)
+
+    result = run_prompt("hello")
+
+    assert result["ok"] is True
+    assert result["output_text"] == '{"summary":"ok"}'
+    assert result["text"] == '{"summary":"ok"}'
+
+
+def test_empty_catalog_is_valid():
+    assert list_catalog_tabs() == []
 
 
 class PreflightFailureRunner(FakeAgentRunner):
@@ -288,6 +445,7 @@ def test_tab_render_payload_allows_trusted_javascript_and_uses_runtime_token():
     payload = render_payload("rendered", "runtime-token")
     assert payload["runtime_token"] == "runtime-token"
     assert payload["manifest"]["id"] == "rendered"
+    assert payload["asset_version"] == git_head("rendered")
     assert 'onclick="window.rendered = true"' in payload["html_body"]
     assert '<script src="app.js"></script>' in payload["html_body"]
     assert "trusted same-page tab code" in payload["js"]

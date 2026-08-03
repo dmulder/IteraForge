@@ -9,6 +9,7 @@ RestartSec=10
 Environment=ITERAFORGE_PORT=8765
 
 ExecStartPre=-/usr/bin/podman rm -f iteraforge
+ExecStartPre=/usr/bin/mkdir -p %h/.config/opencode %h/.opencode %h/.codex %h/.config/codex %h/.claude %h/.config/claude %h/.gemini %h/.config/gemini %h/.local/share/opencode
 ExecStart=/usr/bin/podman run \
     --name iteraforge \
     --replace \
@@ -18,8 +19,19 @@ ExecStart=/usr/bin/podman run \
     -p 127.0.0.1:8765:8765 \
     -v %h/.config/iteraforge:/config:Z \
     -v %h/.local/share/iteraforge:/data:Z \
+    -v %h/.config/opencode:/provider-config/opencode-xdg:ro,z \
+    -v %h/.opencode:/provider-config/opencode-home:ro,z \
+    -v %h/.codex:/provider-config/codex-home:ro,z \
+    -v %h/.config/codex:/provider-config/codex-xdg:ro,z \
+    -v %h/.claude:/provider-config/claude-home:ro,z \
+    -v %h/.config/claude:/provider-config/claude-xdg:ro,z \
+    -v %h/.gemini:/provider-config/gemini-home:ro,z \
+    -v %h/.config/gemini:/provider-config/gemini-xdg:ro,z \
+    -v %h/.local/share/opencode:/provider-secrets/opencode-data:ro,z \
     -e ITERAFORGE_CONFIG_HOME=/config \
     -e ITERAFORGE_DATA_HOME=/data \
+    -e ITERAFORGE_PROVIDER_MOUNT_ROOT=/provider-config \
+    -e ITERAFORGE_PROVIDER_SECRET_MOUNT_ROOT=/provider-secrets \
     -e ITERAFORGE_PORT=8765 \
     localhost/iteraforge:latest
 ExecStop=/usr/bin/podman stop -t 30 iteraforge

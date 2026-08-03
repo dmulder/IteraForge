@@ -10,7 +10,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     OPENCODE_DISABLE_AUTOUPDATE=true
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ca-certificates curl git \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl git nodejs npm \
     && arch="${TARGETARCH:-$(dpkg --print-architecture)}" \
     && case "$arch" in \
         amd64) asset_arch=x64; checksum=6b1113da704253fb4da12b41e4236acecb9f2b62949c945f6eeacaa15111b976 ;; \
@@ -25,7 +25,9 @@ RUN apt-get update \
     && chmod 0755 /usr/local/bin/opencode \
     && git --version \
     && opencode --version \
+    && npm install -g @openai/codex @google/gemini-cli @anthropic-ai/claude-code \
     && rm -f /tmp/opencode.tar.gz \
+    && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 10001 app

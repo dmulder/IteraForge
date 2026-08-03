@@ -64,6 +64,48 @@ class QueryRequest(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
+class CacheOptions(BaseModel):
+    namespace: str = Field(default="default", min_length=1, max_length=120)
+    key: str | None = Field(default=None, max_length=500)
+    ttl_seconds: int | None = Field(default=None, ge=1)
+    refresh: bool = False
+
+
+class ConnectorWebRequest(BaseModel):
+    url: str = Field(min_length=1, max_length=4000)
+    method: str = "GET"
+    headers: dict[str, str] = Field(default_factory=dict)
+    body: str | None = None
+    timeout_seconds: int = Field(default=30, ge=1, le=300)
+    cache: CacheOptions | None = None
+
+
+class ConnectorShellRequest(BaseModel):
+    script: str = Field(min_length=1, max_length=20000)
+    cwd: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
+    stdin: str | None = None
+    timeout_seconds: int = Field(default=30, ge=1, le=300)
+    cache: CacheOptions | None = None
+
+
+class ConnectorAiRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=20000)
+    system: str | None = Field(default=None, max_length=8000)
+    provider: str | None = None
+    model: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
+    timeout_seconds: int = Field(default=120, ge=1, le=900)
+    cache: CacheOptions | None = None
+
+
+class CacheRequest(BaseModel):
+    namespace: str = Field(default="default", min_length=1, max_length=120)
+    key: str | None = Field(default=None, min_length=1, max_length=500)
+    value: Any = None
+    ttl_seconds: int | None = Field(default=None, ge=1)
+
+
 class ActivityEntry(BaseModel):
     id: str
     timestamp: str = Field(default_factory=utc_now)
@@ -81,6 +123,7 @@ class JobRequest(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    agent_provider: str | None = None
     provider: str | None = None
     api_base_url: str | None = None
     model: str | None = None

@@ -12,6 +12,7 @@
     <div class="brand">IteraForge</div>
     <nav id="nav">
       <button class="nav-item active" data-view="builder">Task Builder</button>
+      <button class="nav-item" data-view="tab-store">Tab Store</button>
       <button class="nav-item" data-view="activity">Activity</button>
       <button class="nav-item" data-view="settings">Settings</button>
       <div class="nav-label">Tabs</div>
@@ -48,6 +49,14 @@
       </section>
     </section>
 
+    <section id="tab-store" class="view">
+      <div class="toolbar">
+        <h1>Tab Store</h1>
+        <button id="refresh-tab-store">Refresh</button>
+      </div>
+      <div id="tab-store-list" class="panel"></div>
+    </section>
+
     <section id="activity" class="view">
       <div class="toolbar">
         <h1>Activity</h1>
@@ -59,6 +68,7 @@
     <section id="settings" class="view">
       <h1>Settings</h1>
       <form id="settings-form" class="panel settings-grid">
+        <label>Agent provider <select name="agent_provider" id="agent-provider"></select></label>
         <label>Provider <input name="provider"></label>
         <label>API base URL <input name="api_base_url"></label>
         <label>Model <input name="model"></label>
@@ -75,7 +85,9 @@
       </form>
       <div class="panel">
         <button id="import-opencode">Import Existing OpenCode Config</button>
+        <button id="import-providers">Import Provider Configs</button>
       </div>
+      <div id="provider-status" class="panel"></div>
       <div id="settings-status" class="panel"></div>
     </section>
 

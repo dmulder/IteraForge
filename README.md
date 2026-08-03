@@ -62,8 +62,10 @@ make image
   config.json
   secrets/api-key
   secrets/opencode-auth.json
+  secrets/providers/<provider>/
   secrets/provider-environment/<variable>
   opencode/iteraforge-managed.json
+  providers/<provider>/
 
 ~/.local/share/iteraforge/
   tabs/<tab-id>/
@@ -83,13 +85,19 @@ make image
   runtime/
 ```
 
-## OpenCode Configuration
+## Agent Provider Configuration
 
 The Settings UI manages common fields and writes them to `~/.config/iteraforge/config.json` and `~/.config/iteraforge/opencode/iteraforge-managed.json`. Unknown keys in the OpenCode config file are preserved. Secrets are stored separately at `~/.config/iteraforge/secrets/api-key` with mode `0600` and are never returned by the Settings API.
 
-On install, IteraForge attempts a non-destructive import from `~/.config/opencode` or `~/.opencode` into `~/.config/iteraforge/opencode`. Existing IteraForge files are preserved, and bulky runtime folders such as `node_modules` are skipped. It also imports `~/.local/share/opencode/auth.json` into the protected IteraForge secrets directory and captures supported provider identifiers such as `AZURE_RESOURCE_NAME`. The full OpenCode data directory is never mounted into the container. Set `ITERAFORGE_IMPORT_OPENCODE=0 ./install.sh` to skip these imports. The Settings UI also includes a config import action.
+On install, IteraForge mounts known OpenCode, Codex, Claude, and Gemini configuration locations into the container read-only. This keeps IteraForge aligned with changes the user makes through the upstream CLIs. IteraForge still keeps writable CLI runtime/cache state under its own data directory, and the Settings UI includes an explicit provider import action for taking a snapshot fallback into `~/.config/iteraforge/providers/<provider>`.
 
-The container image includes Git and a pinned OpenCode CLI. Task execution performs a dependency preflight before creating or modifying tab files.
+The container image includes Git and the supported AI CLI entrypoints. Task execution performs a dependency preflight before creating or modifying tab files.
+
+## Trusted Connectors and Community Tabs
+
+Tabs are trusted local applications mounted directly into the base page. They can use `window.IteraForgeRuntime.connectors` for base-mediated web requests, shell commands inside the container, AI prompt responses, and per-tab cache entries.
+
+IteraForge includes the structure for a bundled community tab catalog. The catalog may ship empty; future entries can be proposed by source PR and, once accepted, are installed by copying their source into the user's editable tab tree.
 
 ## Revision and Snapshot Synchronization
 

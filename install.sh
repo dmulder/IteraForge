@@ -36,32 +36,20 @@ for path in "$CONFIG_HOME" "$DATA_HOME"; do
   fi
 done
 
-mkdir -p "$CONFIG_HOME/secrets/provider-environment" "$CONFIG_HOME/opencode" "$DATA_HOME/tabs" "$DATA_HOME/activity" "$DATA_HOME/backups" "$DATA_HOME/runtime" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR" "$HOME/.local/bin"
+mkdir -p "$CONFIG_HOME/secrets/provider-environment" "$CONFIG_HOME/secrets/providers" "$CONFIG_HOME/opencode" "$CONFIG_HOME/providers" "$DATA_HOME/tabs" "$DATA_HOME/activity" "$DATA_HOME/backups" "$DATA_HOME/runtime" "$APP_DIR" "$ICON_DIR" "$UNIT_DIR" "$HOME/.local/bin"
 chmod 700 "$CONFIG_HOME/secrets"
+mkdir -p \
+  "$HOME/.config/opencode" \
+  "$HOME/.opencode" \
+  "$HOME/.codex" \
+  "$HOME/.config/codex" \
+  "$HOME/.claude" \
+  "$HOME/.config/claude" \
+  "$HOME/.gemini" \
+  "$HOME/.config/gemini" \
+  "${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
 
 if [[ "${ITERAFORGE_IMPORT_OPENCODE:-1}" == "1" ]]; then
-  for source in "$HOME/.config/opencode" "$HOME/.opencode"; do
-    if [[ -d "$source" ]]; then
-      echo "Importing existing OpenCode configuration from $source"
-      shopt -s dotglob nullglob
-      for item in "$source"/*; do
-        name="$(basename "$item")"
-        [[ "$name" == "node_modules" || "$name" == ".cache" ]] && continue
-        [[ -e "$CONFIG_HOME/opencode/$name" ]] && continue
-        cp -a "$item" "$CONFIG_HOME/opencode/"
-      done
-      shopt -u dotglob nullglob
-      break
-    fi
-  done
-
-  auth_source="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/auth.json"
-  auth_target="$CONFIG_HOME/secrets/opencode-auth.json"
-  if [[ -f "$auth_source" && ! -e "$auth_target" ]]; then
-    echo "Importing existing OpenCode authentication"
-    install -m 0600 "$auth_source" "$auth_target"
-  fi
-
   for variable in AZURE_RESOURCE_NAME AZURE_COGNITIVE_SERVICES_RESOURCE_NAME; do
     if [[ -n "${!variable:-}" ]]; then
       printf '%s' "${!variable}" > "$CONFIG_HOME/secrets/provider-environment/$variable"

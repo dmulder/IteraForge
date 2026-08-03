@@ -27,13 +27,13 @@ IGNORED_DIRS = {
     "temp",
 }
 WARNING_PATTERNS = [
-    re.compile(r"https?://", re.I),
-    re.compile(r"localStorage", re.I),
-    re.compile(r"sessionStorage", re.I),
-    re.compile(r"document\.cookie", re.I),
     re.compile(r"/api/(tasks|settings|activity|tabs)", re.I),
-    re.compile(r"window\.IteraForgeRuntime", re.I),
 ]
+TOP_LEVEL_LEXICAL_PATTERN = re.compile(r"^(?:const|let|class)\s+[A-Za-z_$]", re.M)
+PERSISTENT_BROWSER_RESOURCE_PATTERN = re.compile(
+    r"\b(?:document|window)\.addEventListener\b|\bnew\s+MutationObserver\b|\bsetInterval\s*\(",
+    re.M,
+)
 
 
 class _Parser(HTMLParser):
@@ -84,6 +84,8 @@ def validate_tab(tab_id: str) -> ValidationReport:
             if path.suffix == ".js":
                 if text.count("{") != text.count("}"):
                     report.warnings.append(f"{rel}: unbalanced braces")
+                reload_warnings = reload_safety_warnings(text)
+                report.warnings.extend(f"{rel}: {warning}" for warning in reload_warnings)
             if path.suffix == ".json":
                 try:
                     json.loads(text)
@@ -118,3 +120,18 @@ def iter_source_files(src: Path, report: ValidationReport):
                 report.ignored_paths.append(str(path.relative_to(src)))
                 continue
             yield path
+
+
+def reload_safety_warnings(text: str) -> list[str]:
+    has_cleanup = "window.IteraForgeTabCleanup" in text
+    warnings: list[str] = []
+    if TOP_LEVEL_LEXICAL_PATTERN.search(text):
+        warnings.append(
+            "top-level let/const/class declarations can break same-page tab reloads; "
+            "wrap app.js in a scoped initializer"
+        )
+    if PERSISTENT_BROWSER_RESOURCE_PATTERN.search(text) and not has_cleanup:
+        warnings.append(
+            "persistent listeners, observers, or timers should register window.IteraForgeTabCleanup"
+        )
+    return warnings

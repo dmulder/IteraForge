@@ -11,7 +11,7 @@ from .events import EventBus
 from .migrations import apply_migrations
 from .models import JobRequest
 from .paths import opencode_root, runtime_root
-from .runner import AgentRunner, OpenCodeRunner
+from .runner import AgentRunner, runner_for_active_provider
 from .settings import load_settings
 from .storage import get_schema_version
 from .tabs import (
@@ -34,7 +34,7 @@ from .validation import validate_tab
 class JobManager:
     def __init__(self, event_bus: EventBus, runner: AgentRunner | None = None) -> None:
         self.event_bus = event_bus
-        self.runner = runner or OpenCodeRunner()
+        self.runner = runner or runner_for_active_provider()
         self.jobs: dict[str, dict[str, Any]] = {}
         self._locks: dict[str, asyncio.Lock] = {}
 
@@ -215,10 +215,21 @@ Rules:
 - Use declarative HTML bindings for storage: data-action, data-collection, data-render-list, data-record-id, and data-field.
 - Generated tabs are trusted same-page applications. JavaScript is allowed and expected.
 - Put custom JavaScript in app.js when the requested behavior needs it. The entrypoint may load it with <script src="app.js"></script>.
-- Do not add external network resources.
-- Do not read secrets, host files, OpenCode config, or other tabs.
+- Tab JavaScript must be reload-safe because IteraForge may mount it repeatedly in the same page. Wrap app.js in a scoped initializer instead of leaving top-level let/const/class state, and register window.IteraForgeTabCleanup when adding document/window listeners, observers, intervals, or other persistent resources.
 - Update AGENTS.md after meaningful changes.
 - Keep migrations declarative JSON.
+
+Trusted runtime connectors available to tab JavaScript:
+- Use window.IteraForgeRuntime.connectors.web.request({{ url, method, headers, body, timeout_seconds, cache }}) for Web/API calls from the IteraForge backend.
+- Use window.IteraForgeRuntime.connectors.shell.run({{ script, cwd, env, stdin, timeout_seconds, cache }}) for shell commands executed inside the IteraForge container.
+- Use window.IteraForgeRuntime.connectors.ai.prompt({{ prompt, system, provider, model, context, timeout_seconds, cache }}) when the tab needs an AI-generated response at runtime.
+- Use window.IteraForgeRuntime.connectors.cache.get/set/delete/clear({{ namespace, key, value, ttl_seconds }}) for explicit tab-owned cache entries.
+- For expensive or repeatable web, shell, and AI calls, pass cache: {{ namespace, key, ttl_seconds }}. Use refresh: true inside cache when the user explicitly asks to refetch.
+- Connector calls can fail. Show useful inline status, preserve existing tab data, and keep stdout/stderr/status details visible when they help the user recover.
+- Show immediate visible pending state before every connector call, disable or relabel the triggering control while waiting, and make clear where the result will appear.
+- Connector HTTP requests can succeed while the connector payload reports a provider failure. Always check payload.ok === false before parsing AI output, and surface payload.error, payload.stderr, or an error message embedded in payload.response.
+- Never show success, an empty result panel, or stale AI output when a connector fails, times out, returns empty text, or returns malformed data.
+- Do not hard-code API keys or secrets in tab source. If a connector needs credentials, assume the trusted base/provider configuration supplies them.
 """
 
 

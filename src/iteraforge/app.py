@@ -9,9 +9,30 @@ from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .activity import list_activity, log_activity
+from .catalog import install_catalog_tab, list_catalog_tabs
+from .connectors import (
+    ai_prompt,
+    cache_clear,
+    cache_delete,
+    cache_get,
+    cache_set,
+    capabilities,
+    shell_run,
+    web_request,
+)
 from .events import EventBus
-from .models import JobRequest, QueryRequest, RecordIn, SettingsUpdate
+from .models import (
+    CacheRequest,
+    ConnectorAiRequest,
+    ConnectorShellRequest,
+    ConnectorWebRequest,
+    JobRequest,
+    QueryRequest,
+    RecordIn,
+    SettingsUpdate,
+)
 from .paths import ensure_base_dirs, opencode_root
+from .providers import import_provider_configs, list_providers
 from .render import render_payload
 from .security import new_token, reject_bad_origin, require_base_auth, validate_tab_id
 from .settings import import_existing_opencode_config, public_settings, save_settings
@@ -153,6 +174,87 @@ def create_app() -> FastAPI:
             )
         }
 
+    @app.get("/api/runtime/connectors/capabilities")
+    def runtime_connector_capabilities(tab_id: str = Depends(_runtime_tab)):
+        log_activity("connector-capabilities", "Connector capabilities requested", tab_id=tab_id)
+        return capabilities()
+
+    @app.post("/api/runtime/connectors/web")
+    def runtime_connector_web(payload: ConnectorWebRequest, tab_id: str = Depends(_runtime_tab)):
+        result = web_request(tab_id, payload)
+        log_activity(
+            "connector-web",
+            f"{payload.method.upper()} {payload.url}",
+            tab_id=tab_id,
+            status=result.get("status"),
+            duration_ms=result.get("duration_ms"),
+            cache_hit=result.get("cache_hit", False),
+        )
+        return result
+
+    @app.post("/api/runtime/connectors/shell")
+    def runtime_connector_shell(payload: ConnectorShellRequest, tab_id: str = Depends(_runtime_tab)):
+        result = shell_run(tab_id, payload)
+        log_activity(
+            "connector-shell",
+            payload.script.splitlines()[0][:160],
+            tab_id=tab_id,
+            exit_code=result.get("exit_code"),
+            duration_ms=result.get("duration_ms"),
+            cache_hit=result.get("cache_hit", False),
+        )
+        return result
+
+    @app.post("/api/runtime/connectors/ai")
+    def runtime_connector_ai(payload: ConnectorAiRequest, tab_id: str = Depends(_runtime_tab)):
+        result = ai_prompt(tab_id, payload)
+        log_activity(
+            "connector-ai",
+            payload.prompt[:160],
+            tab_id=tab_id,
+            provider=result.get("provider") or payload.provider,
+            duration_ms=result.get("duration_ms"),
+            cache_hit=result.get("cache_hit", False),
+        )
+        return result
+
+    @app.post("/api/runtime/connectors/cache/get")
+    def runtime_cache_get(payload: CacheRequest, tab_id: str = Depends(_runtime_tab)):
+        if not payload.key:
+            raise HTTPException(status_code=400, detail="key is required")
+        return {"value": cache_get(tab_id, payload.namespace, payload.key)}
+
+    @app.post("/api/runtime/connectors/cache/set")
+    def runtime_cache_set(payload: CacheRequest, tab_id: str = Depends(_runtime_tab)):
+        if not payload.key:
+            raise HTTPException(status_code=400, detail="key is required")
+        return cache_set(tab_id, payload.namespace, payload.key, payload.value, payload.ttl_seconds)
+
+    @app.post("/api/runtime/connectors/cache/delete")
+    def runtime_cache_delete(payload: CacheRequest, tab_id: str = Depends(_runtime_tab)):
+        if not payload.key:
+            raise HTTPException(status_code=400, detail="key is required")
+        return cache_delete(tab_id, payload.namespace, payload.key)
+
+    @app.post("/api/runtime/connectors/cache/clear")
+    def runtime_cache_clear(payload: CacheRequest, tab_id: str = Depends(_runtime_tab)):
+        return cache_clear(tab_id, payload.namespace)
+
+    @app.get("/api/tab-store")
+    def tab_store(_: None = Depends(require_base_auth)):
+        return {"tabs": list_catalog_tabs()}
+
+    @app.post("/api/tab-store/{template_id}/install")
+    async def install_tab_store_item(template_id: str, payload: dict[str, Any] | None = None, _: None = Depends(require_base_auth)):
+        payload = payload or {}
+        try:
+            result = install_catalog_tab(template_id, payload.get("tab_id"))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        log_activity("tab-store-install", "Installed catalog tab", tab_id=result["tab_id"], result=result)
+        await app.state.event_bus.publish({"type": "tabs-changed", "tab_id": result["tab_id"], "action": "installed"})
+        return result
+
     @app.post("/api/tasks")
     async def submit_task(job: JobRequest, _: None = Depends(require_base_auth)):
         return await app.state.jobs.submit(job)
@@ -204,6 +306,26 @@ def create_app() -> FastAPI:
         )
         log_activity("settings", "Imported existing OpenCode configuration", result=result)
         return result
+
+    @app.get("/api/settings/providers")
+    def settings_providers(_: None = Depends(require_base_auth)):
+        return {"providers": list_providers()}
+
+    @app.post("/api/settings/providers/import")
+    def import_providers(payload: dict[str, Any] | None = None, _: None = Depends(require_base_auth)):
+        payload = payload or {}
+        result = import_provider_configs(
+            Path(payload["source_home"]) if payload.get("source_home") else None,
+            bool(payload.get("overwrite", False)),
+        )
+        log_activity("settings", "Imported provider configurations", result=result)
+        return result
+
+    @app.put("/api/settings/provider-default")
+    def provider_default(payload: dict[str, Any], _: None = Depends(require_base_auth)):
+        data = save_settings({"agent_provider": payload.get("agent_provider")})
+        log_activity("settings", "Default provider updated", provider=data.get("agent_provider"))
+        return data
 
     @app.get("/api/events")
     async def events(_: None = Depends(require_base_auth)):
