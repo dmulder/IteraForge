@@ -216,8 +216,24 @@ Rules:
 - Generated tabs are trusted same-page applications. JavaScript is allowed and expected.
 - Put custom JavaScript in app.js when the requested behavior needs it. The entrypoint may load it with <script src="app.js"></script>.
 - Tab JavaScript must be reload-safe because IteraForge may mount it repeatedly in the same page. Wrap app.js in a scoped initializer instead of leaving top-level let/const/class state, and register window.IteraForgeTabCleanup when adding document/window listeners, observers, intervals, or other persistent resources.
+- Match the existing IteraForge base app styling before inventing new styling. Use custom CSS only for workflow-specific structure that does not already exist in the base app.
+- Add one tab root class to the tab's main content, such as <main class="project-risks-tab">, and scope every tab stylesheet rule under that class.
+- Do not redefine global :root, html, body, main, nav, footer, h1, h2, h3, button, input, textarea, select, *, or base app classes such as .workspace, .brand, .sidebar, .nav-item, .toolbar, .panel, or .view.
+- Do not build a standalone website shell inside the tab. Avoid tab-local top navigation bars, marketing/hero sections, footer branding, meta color-scheme overrides, page-level CSS resets, custom :root design-token palettes, and unscoped utility classes unless the user explicitly asks for a distinct website-like experience.
+- Before finishing, inspect style.css and rewrite any broad selector or custom theme that could affect the IteraForge shell when the tab CSS is injected into the shared page.
 - Update AGENTS.md after meaningful changes.
 - Keep migrations declarative JSON.
+
+Base IteraForge styling to follow:
+- Font stack: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif.
+- Page background #f4f6f8, text #1f2933, panel background white, border #d7dde5.
+- Primary buttons are #1f6feb with white text, 1px #1f6feb border, 6px radius, min-height 36px, and horizontal padding around 12px.
+- Secondary buttons are transparent with #243447 text and transparent border.
+- Panels use white background, 1px #d7dde5 border, 8px radius, 16px padding, and 16px bottom margin.
+- Inputs, selects, and textareas use 1px #b8c0cc border, 6px radius, white background, and about 10px padding.
+- Toolbars are flex rows with space-between alignment, 12px gap, and 16px bottom margin. Headings stay compact: h1 about 28px, h2 about 18px.
+- The base app is quiet and work-focused. Avoid dark themes, oversized editorial typography, negative letter spacing, decorative gradients, and brand-new palettes unless the user explicitly asks for a distinct visual treatment.
+- Known bad pattern to avoid: a generated tab with :root custom colors, body background/font rules, global nav/footer/main/h1 rules, a topbar/brand/hero site shell, and a bespoke beige/green/rust or dark/lime theme. That leaks styles into IteraForge and makes tab switching visually inconsistent.
 
 Trusted runtime connectors available to tab JavaScript:
 - Use window.IteraForgeRuntime.connectors.web.request({{ url, method, headers, body, timeout_seconds, cache }}) for Web/API calls from the IteraForge backend.

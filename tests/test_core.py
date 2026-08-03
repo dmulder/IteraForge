@@ -271,6 +271,15 @@ def test_connector_cache_and_shell_run():
 def test_generated_prompt_documents_connectors():
     prompt = build_prompt({"prompt": "Build", "mode": "create", "tab_id": "x"})
 
+    assert "Base IteraForge styling to follow" in prompt
+    assert "Add one tab root class to the tab's main content" in prompt
+    assert "Do not redefine global :root, html, body, main" in prompt
+    assert "Do not build a standalone website shell inside the tab" in prompt
+    assert "Known bad pattern to avoid" in prompt
+    assert ".brand" in prompt
+    assert "Before finishing, inspect style.css" in prompt
+    assert "#1f6feb" in prompt
+    assert "#d7dde5" in prompt
     assert "window.IteraForgeRuntime.connectors.web.request" in prompt
     assert "window.IteraForgeRuntime.connectors.shell.run" in prompt
     assert "window.IteraForgeRuntime.connectors.ai.prompt" in prompt
@@ -280,6 +289,33 @@ def test_generated_prompt_documents_connectors():
     assert "Do not hard-code API keys" in prompt
     assert "reload-safe" in prompt
     assert "window.IteraForgeTabCleanup" in prompt
+
+
+def test_default_tab_scaffold_uses_scoped_base_aligned_css():
+    scaffold_tab("styled", "Styled", "", "")
+    html = (source_dir("styled") / "index.html").read_text(encoding="utf-8")
+    css = (source_dir("styled") / "style.css").read_text(encoding="utf-8")
+
+    assert 'class="iteraforge-tab"' in html
+    assert ".iteraforge-tab" in css
+    assert "#1f6feb" in css
+    assert "#d7dde5" in css
+    assert ":root" not in css
+    assert "body{" not in css
+    assert "main{" not in css
+    assert ".workspace" not in css
+
+
+def test_default_agents_md_documents_style_contract():
+    scaffold_tab("style-contract", "Style Contract", "", "")
+    agents = (source_dir("style-contract") / "AGENTS.md").read_text(encoding="utf-8")
+
+    assert "Style contract:" in agents
+    assert "Keep all tab CSS scoped under the tab root class" in agents
+    assert "Do not redefine global `:root`, `html`, `body`, `main`, `nav`, `footer`" in agents
+    assert "Avoid standalone website shells" in agents
+    assert "#1f6feb" in agents
+    assert "#d7dde5" in agents
 
 
 def test_runtime_ai_prompt_uses_configured_opencode_home(monkeypatch):

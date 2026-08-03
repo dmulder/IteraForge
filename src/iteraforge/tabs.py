@@ -292,7 +292,7 @@ def _default_html(title: str) -> str:
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main>
+  <main class="iteraforge-tab">
     <header>
       <h1>{title}</h1>
       <p>Local tab workspace</p>
@@ -321,7 +321,7 @@ def _default_html(title: str) -> str:
 
 
 def _default_css() -> str:
-    return """body{font-family:system-ui,sans-serif;margin:0;background:#f6f7f9;color:#1f2933}main{max-width:920px;margin:0 auto;padding:24px}header{margin-bottom:18px}h1{font-size:28px;margin:0 0 4px}form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}input,button{font:inherit;padding:10px;border:1px solid #b8c0cc;border-radius:6px}button{background:#1f6feb;color:white;border-color:#1f6feb}.record{background:white;border:1px solid #d8dee8;border-radius:8px;padding:12px;margin:8px 0;display:flex;justify-content:space-between;gap:12px}.muted{color:#5c6775}"""
+    return """.iteraforge-tab{max-width:920px;margin:0 auto;padding:24px;color:#1f2933;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.iteraforge-tab header{margin-bottom:18px}.iteraforge-tab h1{font-size:28px;margin:0 0 4px}.iteraforge-tab form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.iteraforge-tab input,.iteraforge-tab button{font:inherit;padding:10px;border:1px solid #b8c0cc;border-radius:6px}.iteraforge-tab button{min-height:36px;background:#1f6feb;color:white;border-color:#1f6feb;cursor:pointer}.iteraforge-tab .record{background:white;border:1px solid #d7dde5;border-radius:8px;padding:12px;margin:8px 0;display:flex;justify-content:space-between;gap:12px}.iteraforge-tab .muted{color:#5c6775}"""
 
 
 def _default_js() -> str:
@@ -342,6 +342,12 @@ Storage contract:
 - Use declarative HTML bindings such as `data-action`, `data-collection`, and `data-render-list`.
 - Store user data through JSON record collections.
 - Put custom same-page behavior in app.js when declarative bindings are not enough.
+
+Style contract:
+- Follow the IteraForge base app style: neutral light background, white panels, #d7dde5 borders, #1f6feb primary buttons, 6-8px radii, compact headings, and Inter/system UI typography.
+- Keep all tab CSS scoped under the tab root class in index.html. Do not redefine global `:root`, `html`, `body`, `main`, `nav`, `footer`, headings, form controls, `*`, or base shell classes such as `.workspace`, `.brand`, `.sidebar`, `.toolbar`, `.panel`, or `.view`.
+- Avoid standalone website shells, hero sections, tab-local top navigation, footer branding, custom design-token palettes, and page-level resets unless the user explicitly asks for a distinct website-like experience.
+- Add custom styles only for workflow-specific layout or states that the base app does not already provide.
 
 Security constraints:
 - Do not read secrets, OpenCode configuration, other tabs, host files, or network resources unless the user explicitly asks.
